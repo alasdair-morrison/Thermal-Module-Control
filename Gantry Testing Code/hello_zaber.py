@@ -17,9 +17,9 @@ with Connection.open_serial_port("COM6") as connection:
       axis2.home()
 
       # Move to 10mm
-    axis.move_absolute(10, Units.LENGTH_MILLIMETRES)
-    axis2.move_absolute(10, Units.LENGTH_MILLIMETRES)
+    axis.move_absolute(10, Units.LENGTH_CENTIMETRES)
+    axis2.move_absolute(10, Units.LENGTH_CENTIMETRES)
 
     # Move by an additional 5mm
-    axis.move_relative(5, Units.LENGTH_MILLIMETRES)
-    axis2.move_relative(5, Units.LENGTH_MILLIMETRES)
+    axis.move_relative(5, Units.LENGTH_CENTIMETRES)
+    axis2.move_relative(5, Units.LENGTH_CENTIMETRES)
