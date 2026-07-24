@@ -10,11 +10,19 @@ with Connection.open_serial_port("COM6") as connection:
     device = device_list[0]
     print("Device has {} axes".format(device.axis_count))
     axis = device.get_axis(1)
+    # Home the axis if it is not already homed (just means check if the axis is at its reference position)
     if not axis.is_homed():
+      print("Axis 1 is not homed. Homing now...")
       axis.home(wait_until_idle=False)
     axis2 = device.get_axis(2)
     if not axis2.is_homed():
+      print("Axis 2 is not homed. Homing now...")
       axis2.home(wait_until_idle=False)
+    axis.wait_until_idle()
+    axis2.wait_until_idle()
+    # Start from the base of each axis for demonstration consistency
+    axis.move_absolute(0, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis2.move_absolute(0, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
     axis.wait_until_idle()
     axis2.wait_until_idle()
       # Move to 10mm
