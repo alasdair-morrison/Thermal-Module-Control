@@ -15,11 +15,12 @@ with Connection.open_serial_port("COM6") as connection:
     axis2 = device.get_axis(2)
     if not axis2.is_homed():
       axis2.home()
-
+    axis.home()
+    axis2.home()
       # Move to 10mm
     axis.move_absolute(10, Units.LENGTH_CENTIMETRES)
     axis2.move_absolute(10, Units.LENGTH_CENTIMETRES)
 
     # Move by an additional 5mm
-    axis.move_relative(5, Units.LENGTH_CENTIMETRES)
-    axis2.move_relative(5, Units.LENGTH_CENTIMETRES)
+    axis.move_relative(15, Units.LENGTH_CENTIMETRES)
+    axis2.move_relative(15, Units.LENGTH_CENTIMETRES)
