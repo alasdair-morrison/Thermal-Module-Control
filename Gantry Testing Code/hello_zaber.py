@@ -11,16 +11,20 @@ with Connection.open_serial_port("COM6") as connection:
     print("Device has {} axes".format(device.axis_count))
     axis = device.get_axis(1)
     if not axis.is_homed():
-      axis.home()
+      axis.home(wait_until_idle=False)
     axis2 = device.get_axis(2)
     if not axis2.is_homed():
-      axis2.home()
-    axis.home()
-    axis2.home()
+      axis2.home(wait_until_idle=False)
+    axis.wait_until_idle()
+    axis2.wait_until_idle()
       # Move to 10mm
-    axis.move_absolute(10, Units.LENGTH_CENTIMETRES)
-    axis2.move_absolute(10, Units.LENGTH_CENTIMETRES)
+    axis.move_absolute(10, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis2.move_absolute(10, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis.wait_until_idle()
+    axis2.wait_until_idle()
 
     # Move by an additional 5mm
-    axis.move_relative(15, Units.LENGTH_CENTIMETRES)
-    axis2.move_relative(15, Units.LENGTH_CENTIMETRES)
+    axis.move_relative(15, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis2.move_relative(15, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis.wait_until_idle()
+    axis2.wait_until_idle()
