@@ -1,11 +1,20 @@
+import cv2
 import numpy as np
+import json
 
-def get_hot_cold_spots(temp_array):
+def get_hot_cold_spots(temp_array, size=1):
     """
-    Analyzes a 2D temperature array to find the hottest and coldest pixels.
+    Analyzes a 2D temperature array to find the hottest and coldest areas of pixels of size (size x size).
     Returns the temperatures and their (X, Y) coordinates.
     """
     # Find the maximum and minimum temperature values
+    for i in range(size): # Average over a square of pixels of size (size x size)
+        for j in range(size):
+            # Create a mask to ignore the edges of the array when looking for max/min
+            if i == 0 and j == 0:
+                continue
+            temp_array = np.maximum(temp_array, np.roll(temp_array, shift=(i, j), axis=(0, 1)))
+            temp_array = np.minimum(temp_array, np.roll(temp_array, shift=(-i, -j), axis=(0, 1)))
     max_temp = np.max(temp_array)
     min_temp = np.min(temp_array)
     
@@ -16,3 +25,64 @@ def get_hot_cold_spots(temp_array):
     
     # Return as two tuples: (temperature, x_coord, y_coord)
     return (max_temp, max_x, max_y), (min_temp, min_x, min_y)
+
+def get_hot_cold_spots_with_threshold(temp_array, size=1, high_threshold=0, low_threshold=0):
+    """
+    Analyzes a 2D temperature array to find the hottest and coldest areas of pixels of size (size x size).
+    Returns the temperatures and their (X, Y) coordinates, but only if they exceed a certain threshold.
+    """
+    hot_data, cold_data = get_hot_cold_spots(temp_array, size)
+    
+    # Check if the hottest temperature exceeds the threshold
+    if hot_data[0] < high_threshold:
+        hot_data = (None, None, None)  # Set to None if below threshold
+    
+    # Check if the coldest temperature is below the negative threshold
+    if cold_data[0] > low_threshold:
+        cold_data = (None, None, None)  # Set to None if above negative threshold
+    
+    return hot_data, cold_data
+
+def calibrate_camera_perspective(pixel_points, mm_points, filename="transform_matrix.json"):
+    """
+    Calculates a 3x3 transformation matrix to convert pixels to mm, 
+    accounting for camera tilt and perspective distortion.
+    
+    Inputs:
+        pixel_points: List of 4 [x, y] pixel coordinates (e.g., [[x1, y1], [x2, y2], [x3, y3], [x4, y4]])
+        mm_points: List of the corresponding 4 [x, y] coordinates in mm on the gantry
+    Outputs:
+        matrix: The 3x3 transformation matrix (also saved to a JSON file)
+    """
+    # OpenCV requires float32 numpy arrays for this calculation
+    pts_pixel = np.array(pixel_points, dtype=np.float32)
+    pts_mm = np.array(mm_points, dtype=np.float32)
+    
+    # Calculate the 3x3 perspective transform matrix
+    # This matrix mathematically maps the pixel quadrilateral to the physical mm rectangle
+    matrix = cv2.getPerspectiveTransform(pts_pixel, pts_mm)
+    
+    # Store the 3x3 matrix in a JSON file for later use
+    with open(filename, "w") as f:
+        json.dump(matrix.tolist(), f)
+        
+    return matrix
+
+def get_mm_from_pixels(pixel_x, pixel_y, matrix_filename="transform_matrix.json"):
+    """
+    Converts a single (x, y) pixel coordinate to mm using the saved transformation matrix.
+    """
+    # Load the matrix
+    with open(matrix_filename, "r") as f:
+        matrix = np.array(json.load(f), dtype=np.float32)
+        
+    # OpenCV expects an array of shape (N, 1, 2) for the transform
+    pt_pixel = np.array([[[pixel_x, pixel_y]]], dtype=np.float32)
+    
+    # Apply the perspective transformation
+    pt_mm = cv2.perspectiveTransform(pt_pixel, matrix)
+    
+    # Extract the x and y millimeter coordinates
+    mm_x, mm_y = pt_mm[0][0]
+    
+    return mm_x, mm_y

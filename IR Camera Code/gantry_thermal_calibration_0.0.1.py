@@ -275,21 +275,31 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
 
                         # --- CALL YOUR EXTERNAL FUNCTION ---
-                        hot_data, cold_data = ta.get_hot_cold_spots(image_Temp,size=10)  # You can change the size parameter as needed
-                        
-                        # Print the data to the console
-                        print(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]}) | "
-                              f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
+                        hot_data, cold_data = ta.get_hot_cold_spots_with_threshold(image_Temp, size=10, high_threshold=30, low_threshold=10)
+
+                        if hot_data[0] is None and cold_data[0] is None:
+                            print("No hot or cold spots found above the specified thresholds.")
+                        elif hot_data[0] is None:
+                            print(f"No hot spots found above the high threshold. Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
+                        elif cold_data[0] is None:
+                            print(f"No cold spots found below the low threshold. Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]})")
+                        else:
+                            # Print the data to the console
+                            print(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]}) | "
+                                f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
 
                         # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
                         plt.imshow(image_Temp, cmap='inferno', aspect='auto')
                         plt.colorbar(format='%.2f')
-                        
-                        # Plot a red crosshair on the hottest spot
-                        plt.plot(hot_data[1], hot_data[2], marker='+', color='red', markersize=15, markeredgewidth=2)
-                        
-                        # Plot a blue crosshair on the coldest spot
-                        plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
+
+                        if hot_data[0] is not None:
+                            plt.title(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]})")
+                            # Plot a red crosshair on the hottest spot
+                            plt.plot(hot_data[1], hot_data[2], marker='+', color='red', markersize=15, markeredgewidth=2)
+                        if cold_data[0] is not None:
+                            plt.title(f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
+                            # Plot a blue crosshair on the coldest spot
+                            plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
 
                         '''
                         # Displaying an image of counts when streaming mode is set to Radiometric
