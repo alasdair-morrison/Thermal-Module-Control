@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import numpy as np
 import json
@@ -61,7 +63,11 @@ def calibrate_camera_perspective(pixel_points, mm_points, filename="transform_ma
     # Calculate the 3x3 perspective transform matrix
     # This matrix mathematically maps the pixel quadrilateral to the physical mm rectangle
     matrix = cv2.getPerspectiveTransform(pts_pixel, pts_mm)
+    # Check if the filen
+    #  already exists, if so, overwrite it
     
+    if os.path.exists(filename):
+        os.remove(filename)
     # Store the 3x3 matrix in a JSON file for later use
     with open(filename, "w") as f:
         json.dump(matrix.tolist(), f)

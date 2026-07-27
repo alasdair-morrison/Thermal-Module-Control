@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import keyboard
 import numpy as np
 import thermal_analysis as ta
-
+from zaber_motion import Units
+from zaber_motion.ascii import Connection
 
 class IRFormatType:
     LINEAR_10MK = 1
@@ -17,6 +18,34 @@ class IRFormatType:
 
 CONTINUE_RECORDING = True
 CHOSEN_IR_TYPE = IRFormatType.RADIOMETRIC
+physical_cords = [[0, 0], [250, 0], [250, 250], [0, 250]]  # Physical coordinates in mm for the four corners of the gantry
+pixel_cords = []  # To store the pixel coordinates of the hot spots for each gantry position
+
+def calibrationMovement(x, y, iteration):
+    """
+    Moves the gantry to specific positions for calibration purposes.
+    For use inside a while loop so iteration calls a different position each time.
+    """
+    if iteration == 1:
+        x.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        y.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        x.wait_until_idle()
+        y.wait_until_idle()
+    elif iteration == 2:
+        x.move_absolute(250, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        y.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        x.wait_until_idle()
+        y.wait_until_idle()
+    elif iteration == 3:
+        x.move_absolute(250, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        y.move_absolute(250, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        x.wait_until_idle()
+        y.wait_until_idle()
+    elif iteration == 4:
+        x.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        y.move_absolute(250, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+        x.wait_until_idle()
+        y.wait_until_idle()
 
 
 def handle_close(evt):
@@ -30,7 +59,7 @@ def handle_close(evt):
     CONTINUE_RECORDING = False
 
 
-def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
+def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
     """
     This function continuously acquires images from a device and display them in a GUI.
 
@@ -44,6 +73,8 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
     :rtype: bool
     """
     global CONTINUE_RECORDING
+    global physical_cords
+    global pixel_cords
 
     sNodemap = cam.GetTLStreamNodeMap()
 
@@ -220,7 +251,9 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
 
             K2 = r1 + r2 + r3
             print('K2 =', K2)
-
+        iteration = 1
+        physical_cords = [[0, 0], [250, 0], [250, 250], [0, 250]]  # Physical coordinates in mm for the four corners of the gantry
+        pixel_cords = []  # To store the pixel coordinates of the hot spots for each gantry position
         # Retrieve and display images
         print('Press Enter to stop streaming')
         while(CONTINUE_RECORDING):
@@ -236,6 +269,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                 #  Once an image from the buffer is saved and/or no longer
                 #  needed, the image must be released in order to keep the
                 #  buffer from filling up.
+                calibrationMovement(x, y, iteration)
 
                 image_result = cam.GetNextImage()
 
@@ -275,7 +309,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
 
                         # --- CALL YOUR EXTERNAL FUNCTION ---
-                        hot_data, cold_data = ta.get_hot_cold_spots_with_threshold(image_Temp, size=10, high_threshold=30, low_threshold=10)
+                        hot_data, cold_data = ta.get_hot_cold_spots_with_threshold(image_Temp, size=4, high_threshold=23, low_threshold=20)
 
                         if hot_data[0] is None and cold_data[0] is None:
                             print("No hot or cold spots found above the specified thresholds.")
@@ -289,17 +323,18 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                                 f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
 
                         # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
-                        plt.imshow(image_Temp, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
+                        # plt.imshow(image_Temp, cmap='inferno', aspect='auto')
+                        # plt.colorbar(format='%.2f')
 
                         if hot_data[0] is not None:
-                            plt.title(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]})")
-                            # Plot a red crosshair on the hottest spot
-                            plt.plot(hot_data[1], hot_data[2], marker='+', color='red', markersize=15, markeredgewidth=2)
-                        if cold_data[0] is not None:
-                            plt.title(f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
+                            pixel_cords.append([hot_data[1], hot_data[2]])
+                                # plt.title(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]})")
+                                # # Plot a red crosshair on the hottest spot
+                                # plt.plot(hot_data[1], hot_data[2], marker='+', color='red', markersize=15, markeredgewidth=2)
+                        # if cold_data[0] is not None:
+                            # plt.title(f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
                             # Plot a blue crosshair on the coldest spot
-                            plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
+                            # plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
 
                         '''
                         # Displaying an image of counts when streaming mode is set to Radiometric
@@ -312,19 +347,25 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         plt.colorbar(format='%.2f')
                         '''
 
+
                     # Interval in plt.pause(interval) determines how fast the images are displayed in a GUI
                     # Interval is in seconds.
-                    plt.pause(0.001)
+                    # plt.pause(0.001)
 
                     # Clear current reference of a figure. This will improve display speed significantly
-                    plt.clf()
+                    # plt.clf()
+
+                    iteration += 1
+
+                    if iteration > 4:
+                        CONTINUE_RECORDING = False
 
                     # If user presses enter, close the program
                     if keyboard.is_pressed('ENTER'):
                         print('Program is closing...')
 
                         # Close figure
-                        plt.close('all')
+                        # plt.close('all')
                         CONTINUE_RECORDING = False
 
                 #  Release image
@@ -353,7 +394,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
     return True
 
 
-def run_single_camera(cam):
+def run_single_camera(cam, x, y):
     """
     This function acts as the body of the example; please see NodeMapInfo example
     for more in-depth comments on setting up cameras.
@@ -375,7 +416,7 @@ def run_single_camera(cam):
         nodemap = cam.GetNodeMap()
 
         # Acquire images
-        result &= acquire_and_display_images(cam, nodemap, nodemap_tldevice)
+        result &= acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y)
 
         # Deinitialize camera
         cam.DeInit()
@@ -428,10 +469,34 @@ def main():
     for i, cam in enumerate(cam_list):
 
         print('Running example for camera %d...' % i)
+        with Connection.open_serial_port("COM6") as connection:
+            connection.enable_alerts()
 
-        result &= run_single_camera(cam)
+            device_list = connection.detect_devices()
+            print("Found {} devices".format(len(device_list)))
+            device = device_list[0]
+            print("Device has {} axes".format(device.axis_count))
+            x = device.get_axis(1)
+            y = device.get_axis(2)
+            # Home the axis if it is not already homed (just means check if the axis is at its reference position)
+            if not x.is_homed():
+                print("Axis 1 is not homed. Homing now...")
+                x.home(wait_until_idle=False)
+            
+            if not y.is_homed():
+                print("Axis 2 is not homed. Homing now...")
+                y.home(wait_until_idle=False)
+            x.wait_until_idle()
+            y.wait_until_idle()
+            result &= run_single_camera(cam, x, y)
+            x.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+            y.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+            x.wait_until_idle()
+            y.wait_until_idle()
         print('Camera %d example complete... \n' % i)
-
+        print(f'Pixel coordinates of hot spots: {pixel_cords}')
+        print(f'Physical coordinates of hot spots: {physical_cords}')
+        conversion_matrix = ta.calibrate_camera_perspective(pixel_cords, physical_cords)
     # Release reference to camera
     # NOTE: Unlike the C++ examples, we cannot rely on pointer objects being automatically
     # cleaned up when going out of scope.

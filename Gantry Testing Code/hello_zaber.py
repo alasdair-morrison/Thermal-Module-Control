@@ -21,18 +21,18 @@ with Connection.open_serial_port("COM6") as connection:
     axis.wait_until_idle()
     axis2.wait_until_idle()
     # Start from the base of each axis for demonstration consistency
-    axis.move_absolute(0, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
-    axis2.move_absolute(0, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+    axis2.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
     axis.wait_until_idle()
     axis2.wait_until_idle()
       # Move to 10mm
-    axis.move_absolute(10, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
-    axis2.move_absolute(10, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis.move_absolute(10, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+    axis2.move_absolute(10, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
     axis.wait_until_idle()
     axis2.wait_until_idle()
 
     # Move by an additional 5mm
-    axis.move_relative(15, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
-    axis2.move_relative(15, Units.LENGTH_CENTIMETRES, wait_until_idle=False)
+    axis.move_relative(15, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+    axis2.move_relative(15, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
     axis.wait_until_idle()
     axis2.wait_until_idle()
