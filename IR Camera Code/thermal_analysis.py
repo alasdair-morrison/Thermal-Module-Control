@@ -92,3 +92,11 @@ def get_mm_from_pixels(pixel_x, pixel_y, matrix_filename="transform_matrix.json"
     mm_x, mm_y = pt_mm[0][0]
     
     return mm_x, mm_y
+
+def load_transform_matrix(filename="transform_matrix.json"):
+    """
+    Loads the transformation matrix from a JSON file.
+    """
+    with open(filename, "r") as f:
+        matrix = np.array(json.load(f), dtype=np.float32)
+    return matrix

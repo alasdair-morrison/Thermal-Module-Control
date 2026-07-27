@@ -1,3 +1,4 @@
+import os
 import sys
 print(sys.executable)
 import PySpin
@@ -275,12 +276,16 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
 
                         # --- CALL YOUR EXTERNAL FUNCTION ---
-                        hot_data, cold_data = ta.get_hot_cold_spots(image_Temp,size=10)  # You can change the size parameter as needed
+                        hot_data, cold_data = ta.get_hot_cold_spots(image_Temp,size=4)  # You can change the size parameter as needed
                         
                         # Print the data to the console
                         print(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]}) | "
                               f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
-
+                        if os.path.exists("transform_matrix.json"):
+                            transform_matrix = ta.load_transform_matrix("transform_matrix.json")
+                            hot_real_world = ta.get_mm_from_pixels(hot_data[1], hot_data[2], "transform_matrix.json")
+                            cold_real_world = ta.get_mm_from_pixels(cold_data[1], cold_data[2], "transform_matrix.json")
+                            print(f"Hottest real-world coordinates: {hot_real_world} | Coldest real-world coordinates: {cold_real_world}")
                         # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
                         plt.imshow(image_Temp, cmap='inferno', aspect='auto')
                         plt.colorbar(format='%.2f')

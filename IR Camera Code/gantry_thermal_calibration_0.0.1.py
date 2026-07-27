@@ -468,7 +468,7 @@ def main():
     # Run example on each camera
     for i, cam in enumerate(cam_list):
 
-        print('Running example for camera %d...' % i)
+        print('Running calibration for camera ...')
         with Connection.open_serial_port("COM6") as connection:
             connection.enable_alerts()
 
@@ -493,7 +493,7 @@ def main():
             y.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
             x.wait_until_idle()
             y.wait_until_idle()
-        print('Camera %d example complete... \n' % i)
+        print('Camera calibration complete... \n')
         print(f'Pixel coordinates of hot spots: {pixel_cords}')
         print(f'Physical coordinates of hot spots: {physical_cords}')
         conversion_matrix = ta.calibrate_camera_perspective(pixel_cords, physical_cords)
