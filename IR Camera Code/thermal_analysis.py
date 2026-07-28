@@ -60,7 +60,8 @@ def calibrate_camera_perspective(pixel_points, mm_points, filename="transform_ma
     pts_pixel = np.array(pixel_points, dtype=np.float32)
     pts_mm = np.array(mm_points, dtype=np.float32)
     #average the 8 pairs of pixel points to get 4 points for the perspective transform
-    pixel_points_avg = np.mean(pts_pixel.reshape(-1, 2, 4), axis=1)
+    pixel_points_avg = np.mean(pts_pixel, axis=0)
+    print(f"Average pixel points: {pixel_points_avg}")
     # Calculate the 3x3 perspective transform matrix
     # This matrix mathematically maps the pixel quadrilateral to the physical mm rectangle
     matrix = cv2.getPerspectiveTransform(pixel_points_avg, pts_mm)

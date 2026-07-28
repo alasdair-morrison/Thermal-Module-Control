@@ -254,7 +254,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
 
         passes = 0
         physical_cords = [[0, 0], [250, 0], [250, 250], [0, 250]]  # Physical coordinates in mm for the four corners of the gantry
-        pixel_cords = []  # To store the pixel coordinates of the hot spots for each gantry position
+        pixel_cords_temp = []  # To store the pixel coordinates of the hot spots for each gantry position
         # Retrieve and display images
         print('Press Enter to stop streaming')
         while(CONTINUE_RECORDING):
@@ -330,7 +330,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                             # plt.colorbar(format='%.2f')
 
                             if hot_data[0] is not None:
-                                pixel_cords.append([[hot_data[1], hot_data[2]]])
+                                pixel_cords_temp.append([hot_data[1], hot_data[2]])
                                     # plt.title(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]})")
                                     # # Plot a red crosshair on the hottest spot
                                     # plt.plot(hot_data[1], hot_data[2], marker='+', color='red', markersize=15, markeredgewidth=2)
@@ -350,27 +350,26 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                             plt.colorbar(format='%.2f')
                             '''
 
-                        passes += 1
+                            # If user presses enter, close the program
+                            if keyboard.is_pressed('ENTER'):
+                                print('Program is closing...')
+        
+                                # Close figure
+                                # plt.close('all')
+                                CONTINUE_RECORDING = False
+                pixel_cords.append(pixel_cords_temp.copy())  # Add the pixel coordinates of the hot spots for this gantry position to the main list
+                pixel_cords_temp.clear()  # Clear the temporary list for the next gantry position
+                print(f"Pass {passes + 1} Completed")
+                passes += 1
                     # Interval in plt.pause(interval) determines how fast the images are displayed in a GUI
                     # Interval is in seconds.
                     # plt.pause(0.001)
 
                     # Clear current reference of a figure. This will improve display speed significantly
                     # plt.clf()
+                if passes > 4:
 
-        
-
-                    if passes > 8:
-                        CONTINUE_RECORDING = False
-
-                    # If user presses enter, close the program
-                    if keyboard.is_pressed('ENTER'):
-                        print('Program is closing...')
-
-                        # Close figure
-                        # plt.close('all')
-                        CONTINUE_RECORDING = False
-
+                    CONTINUE_RECORDING = False
                 #  Release image
                 #
                 #  *** NOTES ***
