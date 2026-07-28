@@ -1,5 +1,4 @@
 import os
-
 import cv2
 import numpy as np
 import json
@@ -56,13 +55,15 @@ def calibrate_camera_perspective(pixel_points, mm_points, filename="transform_ma
     Outputs:
         matrix: The 3x3 transformation matrix (also saved to a JSON file)
     """
+
     # OpenCV requires float32 numpy arrays for this calculation
     pts_pixel = np.array(pixel_points, dtype=np.float32)
     pts_mm = np.array(mm_points, dtype=np.float32)
-    
+    #average the 8 pairs of pixel points to get 4 points for the perspective transform
+    pixel_points_avg = np.mean(pts_pixel.reshape(-1, 2, 4), axis=1)
     # Calculate the 3x3 perspective transform matrix
     # This matrix mathematically maps the pixel quadrilateral to the physical mm rectangle
-    matrix = cv2.getPerspectiveTransform(pts_pixel, pts_mm)
+    matrix = cv2.getPerspectiveTransform(pixel_points_avg, pts_mm)
     # Check if the filen
     #  already exists, if so, overwrite it
     
