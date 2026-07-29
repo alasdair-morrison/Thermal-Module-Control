@@ -303,27 +303,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                         # Getting the image data as a np array
                         image_data = image_result.GetNDArray()
 
-                        # Draws an image (data, TemperatureLinear10mK, TemperatureLinear100mK, TemperatureRadiometric on the current figure.
-                        # Select the desired output first
-
-                        # Adapt the title to the correct streaming mode: TempLinear10mK, or TempLinear100mK or pseudo Radiance or Temperature Radiometric
-                        fig.suptitle('A700 Temperature Radiometric')
-
-                        if CHOSEN_IR_TYPE == IRFormatType.LINEAR_10MK:
-                            # Transforming the data array into a temperature array, if streaming mode is set to TemperatueLinear10mK
-                            image_Temp_Celsius_high = (image_data * 0.01) - 273.15
-                            # Displaying an image of temperature when streaming mode is set to TemperatureLinear10mK
-                            plt.imshow(image_Temp_Celsius_high, cmap='inferno', aspect='auto')
-                            plt.colorbar(format='%.2f')
-
-                        elif CHOSEN_IR_TYPE == IRFormatType.LINEAR_100MK:
-                            # Transforming the data array into a temperature array, if streaming mode is set to TemperatureLinear100mK
-                            image_Temp_Celsius_low = (image_data * 0.1) - 273.15
-                            # Displaying an image of temperature when streaming mode is set to TemperatureLinear100mK
-                            plt.imshow(image_Temp_Celsius_low, cmap='inferno', aspect='auto')
-                            plt.colorbar(format='%.2f')
-
-                        elif CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
+                        if CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
                             # Transforming the data array into a pseudo radiance array, if streaming mode is set to Radiometric.
                             # and then calculating the temperature array (degrees Celsius) with the full thermography formula
                             image_Radiance = (image_data - J0) / J1
@@ -339,7 +319,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                                 print(f"Hottest: {max_temp:.2f}°C at Sub-Pixel (X:{c_x:.2f}, Y:{c_y:.2f})")
                                 # Append the exact float coordinates for the perspective transform matrix
                                 pixel_cords_temp.append([c_x, c_y])
-                                
+
                             # If user presses enter, close the program
                             if keyboard.is_pressed('ENTER'):
                                 print('Program is closing...')
