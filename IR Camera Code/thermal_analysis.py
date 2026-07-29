@@ -44,6 +44,45 @@ def get_hot_cold_spots_with_threshold(temp_array, size=1, high_threshold=0, low_
     
     return hot_data, cold_data
 
+def subtract_background(current_frame, background_frame):
+    """
+    Subtracts a static thermal baseline (e.g., warm stepper motors) from the current frame.
+    This eliminates static heat sources and isolates the calibration target.
+    """
+    if background_frame is None:
+        return current_frame
+    
+    # Subtract the static baseline; clip at 0 to prevent negative values 
+    # from artificially lowering the temperature of the target area
+    clean_frame = current_frame - background_frame
+    return np.clip(clean_frame, a_min=0, a_max=None)
+
+def get_hot_spot_centroid(temp_array, threshold=23.0):
+    """
+    Calculates the sub-pixel centroid of the hottest region above a given threshold.
+    Returns the max temperature and the (X, Y) sub-pixel coordinates.
+    """
+    temp_array_float = temp_array.astype(np.float32)
+    
+    # Create a binary mask of pixels above the temperature threshold
+    _, mask = cv2.threshold(temp_array_float, threshold, 255, cv2.THRESH_BINARY)
+    mask = mask.astype(np.uint8)
+    
+    # Calculate image moments to find the center of mass of the heat signature
+    M = cv2.moments(mask)
+    
+    # Ensure the area (m00) is not zero to prevent division by zero errors
+    if M["m00"] != 0:
+        # Calculate precise sub-pixel coordinates
+        c_x = M["m10"] / M["m00"]
+        c_y = M["m01"] / M["m00"]
+        
+        # Get the actual max temperature within the isolated region
+        max_temp = np.max(temp_array[mask == 255])
+        return max_temp, c_x, c_y
+        
+    return None, None, None
+
 def calibrate_camera_perspective(pixel_points, mm_points, filename="transform_matrix.json"):
     """
     Calculates a 3x3 transformation matrix to convert pixels to mm, 
