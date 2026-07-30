@@ -7,12 +7,14 @@ matplotlib.use('Qt5Agg')  # Add this line to force an interactive window
 import matplotlib.pyplot as plt
 import keyboard
 import numpy as np
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 import ir_camera_code.thermal_analysis as ta
 from zaber_motion import Units
 from zaber_motion.ascii import Connection
 import threading
 import time
-import heater_movement as hm
 import math
 
 # Global state for cross-thread communication
