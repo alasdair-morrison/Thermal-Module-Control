@@ -8,15 +8,111 @@ import matplotlib.pyplot as plt
 import keyboard
 import numpy as np
 import ir_camera_code.thermal_analysis as ta
+from zaber_motion import Units
+from zaber_motion.ascii import Connection
+import threading
+import time
+import heater_movement as hm
+import math
 
+# Global state for cross-thread communication
+GLOBAL_HOT_SPOT = None
+GLOBAL_COLD_SPOT = None
+SPOTS_AVAILABLE = False
+CONTINUE_RECORDING = True
+
+def move_heater_to_target(x, y, target_x, target_y):
+    """
+    Moves the heater to the target position in absolute coordinates
+    """
+    x.move_absolute(target_x, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+    y.move_absolute(target_y, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+    x.wait_until_idle()
+    y.wait_until_idle()
+
+def gantry_worker(x, y):
+    """
+    Runs on a background thread. Executes a central spiral, 
+    then actively evades hot spots and hunts cold spots.
+    """
+    global CONTINUE_RECORDING, GLOBAL_HOT_SPOT, GLOBAL_COLD_SPOT, SPOTS_AVAILABLE
+    
+    center_x, center_y = 125.0, 125.0
+    max_radius = 120.0  # Stop 5mm short of the physical 250mm edge
+    pitch = 15.0        # 15mm outward expansion per 360-degree revolution
+    theta = 0.0
+    current_x, current_y = center_x, center_y
+    
+    print("Gantry: Starting Spiral Phase...")
+    
+    while CONTINUE_RECORDING:
+        r = (pitch / (2 * math.pi)) * theta
+        if r > max_radius:
+            print("Gantry: Edge reached. Switching to Reactive Phase...")
+            break  # Exit spiral loop
+            
+        current_x = center_x + r * math.cos(theta)
+        current_y = center_y + r * math.sin(theta)
+        
+        move_heater_to_target(x, y, current_x, current_y)
+        theta += 0.5  # Increment angle by roughly 28 degrees per step
+        
+    step_size = 10.0  # Move 10mm per reactive adjustment
+    
+    while CONTINUE_RECORDING:
+        if not SPOTS_AVAILABLE:
+            time.sleep(0.1)
+            continue
+            
+        # Safely grab the latest coordinates from the camera thread
+        hx, hy = GLOBAL_HOT_SPOT
+        cx, cy = GLOBAL_COLD_SPOT
+        
+        # Vector pointing AWAY from the hot spot
+        v_hot_x = current_x - hx
+        v_hot_y = current_y - hy
+        mag_hot = math.hypot(v_hot_x, v_hot_y)
+        if mag_hot > 0:
+            v_hot_x /= mag_hot
+            v_hot_y /= mag_hot
+            
+        # Vector pointing TOWARD the cold spot
+        v_cold_x = cx - current_x
+        v_cold_y = cy - current_y
+        mag_cold = math.hypot(v_cold_x, v_cold_y)
+        if mag_cold > 0:
+            v_cold_x /= mag_cold
+            v_cold_y /= mag_cold
+            
+        # Combine vectors to find the ideal path
+        dir_x = v_hot_x + v_cold_x
+        dir_y = v_hot_y + v_cold_y
+        mag_dir = math.hypot(dir_x, dir_y)
+        
+        # Normalize the combined vector and scale by step_size
+        if mag_dir > 0:
+            dir_x = (dir_x / mag_dir) * step_size
+            dir_y = (dir_y / mag_dir) * step_size
+            
+        next_x = current_x + dir_x
+        next_y = current_y + dir_y
+        
+        # Hard boundaries (clamp to the 0-250mm physical workspace)
+        next_x = max(0.0, min(250.0, next_x))
+        next_y = max(0.0, min(250.0, next_y))
+        
+        # Move and wait
+        move_heater_to_target(x, y, next_x, next_y)
+        current_x, current_y = next_x, next_y
+        
+        # Dwell briefly to let the material absorb heat and update the thermal signature
+        time.sleep(0.5)
 
 class IRFormatType:
     LINEAR_10MK = 1
     LINEAR_100MK = 2
     RADIOMETRIC = 3
 
-
-CONTINUE_RECORDING = True
 CHOSEN_IR_TYPE = IRFormatType.RADIOMETRIC
 
 
@@ -264,39 +360,39 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                     fig.suptitle('A700 Temperature Radiometric')
 
                     if CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
-                        # Transforming the data array into a pseudo radiance array, if streaming mode is set to Radiometric.
-                        # and then calculating the temperature array (degrees Celsius) with the full thermography formula
+                        global GLOBAL_HOT_SPOT, GLOBAL_COLD_SPOT, SPOTS_AVAILABLE
+                        
                         image_Radiance = (image_data - J0) / J1
                         image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
-                        if background_Temp is not None:
-                            clean_temp_array = ta.subtract_background(image_Temp, background_Temp)
-                        else :
-                            clean_temp_array = image_Temp
-                        max_temp, c_x, c_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
                         
-                        if transform_matrix is not None:
-                            c_x, c_y = ta.transform_coordinates(c_x, c_y, transform_matrix)
+                        
+                        clean_temp_array = ta.subtract_background(image_Temp, background_Temp)
+                        hot_max, h_px_x, h_px_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
+                        
+                        # Find the absolute minimum temperature in the frame directly
+                        cold_min, c_px_x, c_px_y = ta.get_cold_spot_centroid(image_Temp, threshold=0.15)
 
-                        # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
-                        plt.imshow(image_Temp, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-                        
-                        # Plot a red crosshair on the hottest spot
-                        plt.plot(c_x, c_y, marker='+', color='red', markersize=15, markeredgewidth=2)
-                        
-                        # Plot a blue crosshair on the coldest spot
-                        #plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
+                        if hot_max is not None or cold_min is not None:
+                            SPOTS_AVAILABLE = True
+                            
+                            if hot_max is not None:
+                                hot_mm_x, hot_mm_y = ta.transform_coordinates(h_px_x, h_px_y, transform_matrix)
+                                GLOBAL_HOT_SPOT = (hot_mm_x, hot_mm_y)
+                                plt.plot(h_px_x, h_px_y, marker='+', color='red', markersize=15)
+                            else:
+                                GLOBAL_HOT_SPOT = None
 
-                        '''
-                        # Displaying an image of counts when streaming mode is set to Radiometric
-                        plt.imshow(image_data, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-                        '''
-                        '''
-                        # Displaying an image of pseudo radiance when streaming mode is set to Radiometric
-                        plt.imshow(image_Radiance, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-                        '''
+                            if cold_min is not None:
+                                cold_mm_x, cold_mm_y = ta.transform_coordinates(c_px_x, c_px_y, transform_matrix)
+                                GLOBAL_COLD_SPOT = (cold_mm_x, cold_mm_y)
+                                plt.plot(c_px_x, c_px_y, marker='+', color='cyan', markersize=15)
+                            else:
+                                GLOBAL_COLD_SPOT = None
+                        else:
+                            SPOTS_AVAILABLE = False
+                            GLOBAL_HOT_SPOT = None
+                            GLOBAL_COLD_SPOT = None
+                            print("No valid hot or cold spots detected in this frame.")
 
                     # Interval in plt.pause(interval) determines how fast the images are displayed in a GUI
                     # Interval is in seconds.
@@ -414,8 +510,29 @@ def main():
     for i, cam in enumerate(cam_list):
 
         print('Running example for camera %d...' % i)
-
-        result &= run_single_camera(cam)
+        # Connect to Gantry and start the gantry worker thread
+        with Connection.open_serial_port("COM6") as connection:
+            connection.enable_alerts()
+            device_list = connection.detect_devices()
+            device = device_list[0]
+            
+            x = device.get_axis(1)
+            y = device.get_axis(2)
+            
+            # Home the axes if necessary
+            if not x.is_homed():
+                x.home(wait_until_idle=False)
+            if not y.is_homed():
+                y.home(wait_until_idle=False)
+            x.wait_until_idle()
+            y.wait_until_idle()
+            
+            # daemon=True ensures the thread forcefully dies if the main program crashes
+            gantry_thread = threading.Thread(target=hm.gantry_worker, args=(x, y), daemon=True)
+            gantry_thread.start()
+            
+            # This will block the main thread and run continuously until the GUI is closed
+            result &= run_single_camera(cam)
         print('Camera %d example complete... \n' % i)
 
     # Release reference to camera

@@ -98,6 +98,45 @@ def get_hot_spot_centroid(temp_array, threshold=23.0):
         
     return None, None, None
 
+def get_cold_spot_centroid(temp_array, threshold=22.0):
+    """
+    Calculates the sub-pixel centroid of the coldest region below a given threshold.
+    If threshold is less than 1.0 (e.g., 0.20), it is treated as a relative fraction 
+    of the temperature range (e.g., isolating the bottom 20% of the heat spread).
+    Otherwise, it is treated as an absolute temperature threshold.
+    Returns the min temperature and the (X, Y) sub-pixel coordinates.
+    """
+    temp_array_float = temp_array.astype(np.float32)
+    min_val = np.min(temp_array_float)
+    max_val = np.max(temp_array_float)
+    
+    # If using relative thresholding
+    if threshold < 1.0:
+        # Calculate the threshold to capture the bottom X% of the temperature range
+        actual_threshold = min_val + ((max_val - min_val) * threshold)
+    else:
+        actual_threshold = threshold
+    
+    # Create a binary mask of pixels BELOW the temperature threshold
+    # cv2.THRESH_BINARY_INV makes pixels colder than the threshold white (255) 
+    _, mask = cv2.threshold(temp_array_float, actual_threshold, 255, cv2.THRESH_BINARY_INV)
+    mask = mask.astype(np.uint8)
+    
+    # Calculate image moments to find the center of mass of the cold signature
+    M = cv2.moments(mask)
+    
+    # Ensure the area (m00) is not zero to prevent division by zero errors
+    if M["m00"] != 0:
+        # Calculate precise sub-pixel coordinates
+        c_x = M["m10"] / M["m00"]
+        c_y = M["m01"] / M["m00"]
+        
+        # Get the actual minimum temperature within the isolated region
+        min_temp = np.min(temp_array[mask == 255])
+        return min_temp, c_x, c_y
+        
+    return None, None, None
+
 def calibrate_camera_perspective(pixel_points, mm_points, filename="transform_matrix.json"):
     """
     Calculates a 3x3 transformation matrix to convert pixels to mm, 
