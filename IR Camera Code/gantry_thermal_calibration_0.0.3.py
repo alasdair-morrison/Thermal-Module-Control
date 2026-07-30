@@ -269,7 +269,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
             # Convert background frame to Temperature (Radiometric formula)
             bg_Radiance = (bg_image_data - J0) / J1
             background_Temp = (B / np.log(R / ((bg_Radiance / Emiss / Tau) - K2) + F)) - 273.15
-            
+            ta.save_background(background_Temp, filename="background.npy")  # Save the background frame to a .npy file
             bg_image_result.Release()
             print('Background captured successfully.')
             
@@ -313,10 +313,10 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
 
                             clean_temp_array = ta.subtract_background(image_Temp, background_Temp)
 
-                            max_temp, c_x, c_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=23.0)
+                            max_temp, c_x, c_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
 
                             if max_temp is None:
-                                print("No hot spots found above the 23.0°C threshold.")
+                                print("No hot spots found above the 75% of background threshold.")
                             else:
                                 print(f"Hottest: {max_temp:.2f}°C at Sub-Pixel (X:{c_x:.2f}, Y:{c_y:.2f})")
                                 # Append the exact float coordinates for the perspective transform matrix
@@ -340,7 +340,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
 
                     # Clear current reference of a figure. This will improve display speed significantly
                     # plt.clf()
-                if passes > 4:
+                if passes > 3:
 
                     CONTINUE_RECORDING = False
                 #  Release image

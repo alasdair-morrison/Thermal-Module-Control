@@ -221,7 +221,14 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
 
             K2 = r1 + r2 + r3
             print('K2 =', K2)
-
+        if os.path.exists("background.npy"):
+            background_Temp = ta.load_background(filename="background.npy")  # Load the background frame from a .npy file if it exists
+        else:
+            background_Temp = None
+        if os.path.exists("transform_matrix.json"):
+                                    transform_matrix = ta.load_transform_matrix("transform_matrix.json")
+        else:
+            transform_matrix = None
         # Retrieve and display images
         print('Press Enter to stop streaming')
         while(CONTINUE_RECORDING):
@@ -274,27 +281,28 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         # and then calculating the temperature array (degrees Celsius) with the full thermography formula
                         image_Radiance = (image_data - J0) / J1
                         image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
-
-                        # --- CALL YOUR EXTERNAL FUNCTION ---
-                        hot_data, cold_data = ta.get_hot_cold_spots(image_Temp,size=4)  # You can change the size parameter as needed
+                        if background_Temp is not None:
+                            clean_temp_array = ta.subtract_background(image_Temp, background_Temp)
+                        else :
+                            clean_temp_array = image_Temp
+                        max_temp, c_x, c_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
                         
                         # Print the data to the console
-                        print(f"Hottest: {hot_data[0]:.2f}°C at (X:{hot_data[1]}, Y:{hot_data[2]}) | "
-                              f"Coldest: {cold_data[0]:.2f}°C at (X:{cold_data[1]}, Y:{cold_data[2]})")
-                        if os.path.exists("transform_matrix.json"):
-                            transform_matrix = ta.load_transform_matrix("transform_matrix.json")
-                            hot_real_world = ta.get_mm_from_pixels(hot_data[1], hot_data[2], "transform_matrix.json")
-                            cold_real_world = ta.get_mm_from_pixels(cold_data[1], cold_data[2], "transform_matrix.json")
-                            print(f"Hottest real-world coordinates: {hot_real_world} | Coldest real-world coordinates: {cold_real_world}")
+                        print(f"Hottest: {max_temp:.2f}°C at (X:{c_x}, Y:{c_y})")
+                        if transform_matrix is not None:
+                            hot_real_world = ta.get_mm_from_pixels(c_x, c_y, transform_matrix)
+                        else:
+                            hot_real_world = (None, None)       
+                            print(f"Hottest real-world coordinates: {hot_real_world}")
                         # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
                         plt.imshow(image_Temp, cmap='inferno', aspect='auto')
                         plt.colorbar(format='%.2f')
                         
                         # Plot a red crosshair on the hottest spot
-                        plt.plot(hot_data[1], hot_data[2], marker='+', color='red', markersize=15, markeredgewidth=2)
+                        plt.plot(c_x, c_y, marker='+', color='red', markersize=15, markeredgewidth=2)
                         
                         # Plot a blue crosshair on the coldest spot
-                        plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
+                        #plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
 
                         '''
                         # Displaying an image of counts when streaming mode is set to Radiometric
