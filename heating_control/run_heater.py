@@ -62,7 +62,7 @@ def gantry_worker(x, y):
     step_size = 10.0  # Move 10mm per reactive adjustment
     
     while CONTINUE_RECORDING:
-        if not SPOTS_AVAILABLE:
+        if not SPOTS_AVAILABLE or GLOBAL_HOT_SPOT is None or GLOBAL_COLD_SPOT is None:
             time.sleep(0.1)
             continue
             
@@ -366,28 +366,31 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         
                         image_Radiance = (image_data - J0) / J1
                         image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
-                        
+                        plt.imshow(image_Temp, cmap='inferno', aspect='auto')
+                        plt.colorbar(format='%.2f')
                         
                         clean_temp_array = ta.subtract_background(image_Temp, background_Temp)
                         hot_max, h_px_x, h_px_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
                         
                         # Find the absolute minimum temperature in the frame directly
-                        cold_min, c_px_x, c_px_y = ta.get_cold_spot_centroid(image_Temp, threshold=0.15)
+                        cold_min, c_px_x, c_px_y = ta.get_cold_spot_centroid(clean_temp_array, threshold=0.15)
 
                         if hot_max is not None or cold_min is not None:
                             SPOTS_AVAILABLE = True
                             
                             if hot_max is not None:
-                                hot_mm_x, hot_mm_y = ta.transform_coordinates(h_px_x, h_px_y, transform_matrix)
+                                hot_mm_x, hot_mm_y = ta.get_mm_from_pixels(h_px_x, h_px_y, transform_matrix)
                                 GLOBAL_HOT_SPOT = (hot_mm_x, hot_mm_y)
                                 plt.plot(h_px_x, h_px_y, marker='+', color='red', markersize=15)
+                                plt.text(h_px_x + 5, h_px_y, f"{hot_max:.2f}°C", color='white', fontsize=12, weight='bold')
                             else:
                                 GLOBAL_HOT_SPOT = None
 
                             if cold_min is not None:
-                                cold_mm_x, cold_mm_y = ta.transform_coordinates(c_px_x, c_px_y, transform_matrix)
+                                cold_mm_x, cold_mm_y = ta.get_mm_from_pixels(c_px_x, c_px_y, transform_matrix)
                                 GLOBAL_COLD_SPOT = (cold_mm_x, cold_mm_y)
                                 plt.plot(c_px_x, c_px_y, marker='+', color='cyan', markersize=15)
+                                plt.text(c_px_x + 5, c_px_y, f"{cold_min:.2f}°C", color='white', fontsize=12, weight='bold')
                             else:
                                 GLOBAL_COLD_SPOT = None
                         else:
@@ -511,7 +514,7 @@ def main():
     # Run example on each camera
     for i, cam in enumerate(cam_list):
 
-        print('Running example for camera %d...' % i)
+        print('Running camera thermal control program')
         # Connect to Gantry and start the gantry worker thread
         with Connection.open_serial_port("COM6") as connection:
             connection.enable_alerts()
@@ -530,12 +533,12 @@ def main():
             y.wait_until_idle()
             
             # daemon=True ensures the thread forcefully dies if the main program crashes
-            gantry_thread = threading.Thread(target=hm.gantry_worker, args=(x, y), daemon=True)
+            gantry_thread = threading.Thread(target=gantry_worker, args=(x, y), daemon=True)
             gantry_thread.start()
             
             # This will block the main thread and run continuously until the GUI is closed
             result &= run_single_camera(cam)
-        print('Camera %d example complete... \n' % i)
+        print("Gantry thread has been stopped. Control Program is exiting...")
 
     # Release reference to camera
     # NOTE: Unlike the C++ examples, we cannot rely on pointer objects being automatically
