@@ -224,11 +224,15 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
         if os.path.exists("background.npy"):
             background_Temp = ta.load_background(filename="background.npy")  # Load the background frame from a .npy file if it exists
         else:
+            print("No background frame found. Please run the calibration script first.")
             background_Temp = None
+            return False
         if os.path.exists("transform_matrix.json"):
                                     transform_matrix = ta.load_transform_matrix("transform_matrix.json")
         else:
+            print("No transform matrix found. Please run the calibration script first.")
             transform_matrix = None
+            return False
         # Retrieve and display images
         print('Press Enter to stop streaming')
         while(CONTINUE_RECORDING):
