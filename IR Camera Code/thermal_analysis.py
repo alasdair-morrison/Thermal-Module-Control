@@ -60,12 +60,24 @@ def subtract_background(current_frame, background_frame):
 def get_hot_spot_centroid(temp_array, threshold=23.0):
     """
     Calculates the sub-pixel centroid of the hottest region above a given threshold.
+    If threshold is less than 1.0 (e.g., 0.75), it is treated as a relative fraction of the maximum value.
+    Otherwise, it is treated as an absolute temperature threshold.
     Returns the max temperature and the (X, Y) sub-pixel coordinates.
     """
     temp_array_float = temp_array.astype(np.float32)
+    max_val = np.max(temp_array_float)
+    
+    # If using relative thresholding
+    if threshold < 1.0:
+        actual_threshold = max_val * threshold
+        # Require a minimum signal to avoid thresholding background noise
+        if max_val < 3.0: 
+            return None, None, None
+    else:
+        actual_threshold = threshold
     
     # Create a binary mask of pixels above the temperature threshold
-    _, mask = cv2.threshold(temp_array_float, threshold, 255, cv2.THRESH_BINARY)
+    _, mask = cv2.threshold(temp_array_float, actual_threshold, 255, cv2.THRESH_BINARY)
     mask = mask.astype(np.uint8)
     
     # Calculate image moments to find the center of mass of the heat signature
