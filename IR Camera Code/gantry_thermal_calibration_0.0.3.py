@@ -6,6 +6,7 @@ matplotlib.use('Qt5Agg')  # Add this line to force an interactive window
 import matplotlib.pyplot as plt
 import keyboard
 import numpy as np
+import time
 import thermal_analysis as ta
 from zaber_motion import Units
 from zaber_motion.ascii import Connection
@@ -46,6 +47,7 @@ def calibrationMovement(x, y, iteration):
         y.move_absolute(250, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
         x.wait_until_idle()
         y.wait_until_idle()
+    time.sleep(0.15)
 
 
 def handle_close(evt):
@@ -327,6 +329,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                                 # Close figure
                                 # plt.close('all')
                                 CONTINUE_RECORDING = False
+                    image_result.Release()
                 pixel_cords.append(pixel_cords_temp.copy())  # Add the pixel coordinates of the hot spots for this gantry position to the main list
                 pixel_cords_temp.clear()  # Clear the temporary list for the next gantry position
                 print(f"Pass {passes + 1} Completed")
