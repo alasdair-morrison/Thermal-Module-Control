@@ -150,3 +150,56 @@ def load_transform_matrix(filename="transform_matrix.json"):
     with open(filename, "r") as f:
         matrix = np.array(json.load(f), dtype=np.float32)
     return matrix
+
+def calibrate_with_checkerboard(image_array, board_dims=(7, 7), square_size_mm=30.0, filename="transform_matrix.json"):
+    """
+    Finds a thermal checkerboard in the image and computes a highly accurate homography matrix.
+    
+    Inputs:
+        image_array: The 2D temperature array (or radiometric counts) from the camera.
+        board_dims: The number of INTERIOR corners on the checkerboard (columns, rows).
+        square_size_mm: The physical size of one side of a printed square in millimeters.
+    """
+    # Normalize the thermal array to a standard 8-bit grayscale image (0-255)
+    # OpenCV's checkerboard detector requires uint8 format
+    img_norm = cv2.normalize(image_array, None, 0, 255, cv2.NORM_MINMAX)
+    gray_img = np.uint8(img_norm)
+    
+    # Generate the ideal real-world coordinates for the checkerboard corners
+    # This creates a grid of points like (0,0,0), (30,0,0), (60,0,0)...
+    obj_points = np.zeros((board_dims[0] * board_dims[1], 3), np.float32)
+    obj_points[:, :2] = np.mgrid[0:board_dims[0], 0:board_dims[1]].T.reshape(-1, 2)
+    obj_points *= square_size_mm
+    
+    # Drop the Z-axis (since the gantry bed is flat) so it matches the 2D pixel coordinates
+    pts_mm = obj_points[:, :2] 
+
+    # Find the checkerboard corners in the thermal image
+    flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
+    found, corners = cv2.findChessboardCorners(gray_img, board_dims, flags)
+    
+    if found:
+        print("Checkerboard detected! Refining sub-pixel coordinates...")
+        
+        # Refine the corner detection to sub-pixel accuracy for maximum precision
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        corners_subpix = cv2.cornerSubPix(gray_img, corners, (11, 11), (-1, -1), criteria)
+        
+        # Reshape the corners array to match the (N, 2) shape of pts_mm
+        pts_pixel = corners_subpix.reshape(-1, 2)
+        
+        # Calculate the Homography matrix utilizing all points
+        # RANSAC ignores any falsely detected corner outliers
+        matrix, status = cv2.findHomography(pts_pixel, pts_mm, cv2.RANSAC, 5.0)
+        
+        # Save the matrix using your existing JSON logic
+        if os.path.exists(filename):
+            os.remove(filename)
+        with open(filename, "w") as f:
+            json.dump(matrix.tolist(), f)
+            
+        print("Checkerboard calibration complete. Matrix saved.")
+        return matrix
+    else:
+        print("Failed to detect checkerboard. Ensure the thermal contrast is high enough.")
+        return None
