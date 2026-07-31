@@ -22,40 +22,6 @@ def load_background(filename="background.npy"):
     print(f"Background file {filename} not found.")
     return None
 
-def get_hot_cold_spots(temp_array, size=1):
-    """
-    Analyzes a 2D temperature array to find the hottest and coldest areas of pixels of size (size x size).
-    Returns the temperatures and their (X, Y) coordinates.
-    """
-    for i in range(size):
-        for j in range(size):
-            if i == 0 and j == 0:
-                continue
-            temp_array = np.maximum(temp_array, np.roll(temp_array, shift=(i, j), axis=(0, 1)))
-            temp_array = np.minimum(temp_array, np.roll(temp_array, shift=(-i, -j), axis=(0, 1)))
-    max_temp = np.max(temp_array)
-    min_temp = np.min(temp_array)
-    
-    max_y, max_x = np.unravel_index(np.argmax(temp_array), temp_array.shape)
-    min_y, min_x = np.unravel_index(np.argmin(temp_array), temp_array.shape)
-    
-    return (max_temp, max_x, max_y), (min_temp, min_x, min_y)
-
-def get_hot_cold_spots_with_threshold(temp_array, size=1, high_threshold=0, low_threshold=0):
-    """
-    Analyzes a 2D temperature array to find the hottest and coldest areas of pixels of size (size x size).
-    Returns the temperatures and their (X, Y) coordinates, but only if they exceed a certain threshold.
-    """
-    hot_data, cold_data = get_hot_cold_spots(temp_array, size)
-    
-    if hot_data[0] < high_threshold:
-        hot_data = (None, None, None)
-    
-    if cold_data[0] > low_threshold:
-        cold_data = (None, None, None)
-    
-    return hot_data, cold_data
-
 def subtract_background(current_frame, background_frame):
     """
     Subtracts a static thermal baseline (e.g., warm stepper motors) from the current frame.
