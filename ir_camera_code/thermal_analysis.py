@@ -160,10 +160,22 @@ def calibrate_with_checkerboard(image_array, board_dims=(7, 7), square_size_mm=3
         board_dims: The number of INTERIOR corners on the checkerboard (columns, rows).
         square_size_mm: The physical size of one side of a printed square in millimeters.
     """
-    # Normalize the thermal array to a standard 8-bit grayscale image (0-255)
-    # OpenCV's checkerboard detector requires uint8 format
-    img_norm = cv2.normalize(image_array, None, 0, 255, cv2.NORM_MINMAX)
+    # Calculate the 2nd and 98th percentiles to ignore extreme hot/cold noise spikes
+    vmin, vmax = np.percentile(image_array, (2, 98))
+    
+    # Clip the array to these limits
+    clipped_array = np.clip(image_array, a_min=vmin, a_max=vmax)
+    
+    # Normalize the clipped array to 8-bit (0-255)
+    img_norm = cv2.normalize(clipped_array, None, 0, 255, cv2.NORM_MINMAX)
     gray_img = np.uint8(img_norm)
+    
+    # --- DEBUG VIEW ---
+    # This pops up a window showing exactly what OpenCV is trying to process.
+    # If this window looks like a solid gray blob, your thermal delta is still too low.
+    cv2.imshow("OpenCV Debug View", gray_img)
+    cv2.waitKey(500) # Pause for half a second to let the window render
+    # ------------------
     
     # Generate the ideal real-world coordinates for the checkerboard corners
     # This creates a grid of points like (0,0,0), (30,0,0), (60,0,0)...
@@ -175,7 +187,7 @@ def calibrate_with_checkerboard(image_array, board_dims=(7, 7), square_size_mm=3
     pts_mm = obj_points[:, :2] 
 
     # Find the checkerboard corners in the thermal image
-    flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
+    flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE + cv2.CALIB_CB_FAST_CHECK
     found, corners = cv2.findChessboardCorners(gray_img, board_dims, flags)
     
     if found:

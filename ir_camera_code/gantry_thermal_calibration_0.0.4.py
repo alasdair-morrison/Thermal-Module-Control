@@ -274,7 +274,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                             image_Radiance = (image_data - J0) / J1
                             image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
 
-                            ta.calibrate_with_checkerboard(image_Temp)
+                            ta.calibrate_with_checkerboard(image_Temp, board_dims=(10, 8), square_size_mm=30.0)
 
                             # If user presses enter, close the program
                             if keyboard.is_pressed('ENTER'):
