@@ -169,6 +169,7 @@ def calibrate_with_checkerboard(image_array, board_dims=(7, 7), square_size_mm=3
     # Normalize the clipped array to 8-bit (0-255)
     img_norm = cv2.normalize(clipped_array, None, 0, 255, cv2.NORM_MINMAX)
     gray_img = np.uint8(img_norm)
+    gray_img = cv2.bitwise_not(gray_img)
     
     # --- DEBUG VIEW ---
     # This pops up a window showing exactly what OpenCV is trying to process.
@@ -187,7 +188,7 @@ def calibrate_with_checkerboard(image_array, board_dims=(7, 7), square_size_mm=3
     pts_mm = obj_points[:, :2] 
 
     # Find the checkerboard corners in the thermal image
-    flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE + cv2.CALIB_CB_FAST_CHECK
+    flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
     found, corners = cv2.findChessboardCorners(gray_img, board_dims, flags)
     
     if found:

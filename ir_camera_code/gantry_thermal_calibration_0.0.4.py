@@ -223,7 +223,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
 
             K2 = r1 + r2 + r3
             print('K2 =', K2)
-        if CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
+        """if CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
             print('\n--- BACKGROUND CALIBRATION ---')
             input('Ensure the hot calibration target is NOT on the gantry bed. Press Enter to capture background...')
             
@@ -239,7 +239,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
             print('Background captured successfully.')
             
             input('Place the hot calibration target on the gantry head. Press Enter to begin tracking passes...')
-        
+        """
         # Retrieve and display images
         print('Press Enter to stop streaming')
         while(CONTINUE_RECORDING):
@@ -283,7 +283,6 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
                                 # Close figure
                                 # plt.close('all')
                                 CONTINUE_RECORDING = False
-                    image_result.Release()
                 #  Release image
                 #
                 #  *** NOTES ***

@@ -288,18 +288,22 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                         max_temp, c_x, c_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
                         
                         # Print the data to the console
-                        print(f"Hottest: {max_temp:.2f}°C at (X:{c_x}, Y:{c_y})")
+                        if max_temp is not None and c_x is not None and c_y is not None:
+                            print(f"Hottest: {max_temp:.2f}°C at (X:{c_x}, Y:{c_y})")
+                        else: 
+                            print("No hot spot found above the threshold.")
                         if transform_matrix is not None:
                             hot_real_world = ta.get_mm_from_pixels(c_x, c_y, transform_matrix)
                         else:
                             hot_real_world = (None, None)       
-                            print(f"Hottest real-world coordinates: {hot_real_world}")
+                        print(f"Hottest real-world coordinates: {hot_real_world}")
                         # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
                         plt.imshow(image_Temp, cmap='inferno', aspect='auto')
                         plt.colorbar(format='%.2f')
                         
                         # Plot a red crosshair on the hottest spot
-                        plt.plot(c_x, c_y, marker='+', color='red', markersize=15, markeredgewidth=2)
+                        if c_x is not None and c_y is not None:
+                            plt.plot(c_x, c_y, marker='+', color='red', markersize=15, markeredgewidth=2)
                         
                         # Plot a blue crosshair on the coldest spot
                         #plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
