@@ -22,40 +22,6 @@ def load_background(filename="background.npy"):
     print(f"Background file {filename} not found.")
     return None
 
-def get_hot_cold_spots(temp_array, size=1):
-    """
-    Analyzes a 2D temperature array to find the hottest and coldest areas of pixels of size (size x size).
-    Returns the temperatures and their (X, Y) coordinates.
-    """
-    for i in range(size):
-        for j in range(size):
-            if i == 0 and j == 0:
-                continue
-            temp_array = np.maximum(temp_array, np.roll(temp_array, shift=(i, j), axis=(0, 1)))
-            temp_array = np.minimum(temp_array, np.roll(temp_array, shift=(-i, -j), axis=(0, 1)))
-    max_temp = np.max(temp_array)
-    min_temp = np.min(temp_array)
-    
-    max_y, max_x = np.unravel_index(np.argmax(temp_array), temp_array.shape)
-    min_y, min_x = np.unravel_index(np.argmin(temp_array), temp_array.shape)
-    
-    return (max_temp, max_x, max_y), (min_temp, min_x, min_y)
-
-def get_hot_cold_spots_with_threshold(temp_array, size=1, high_threshold=0, low_threshold=0):
-    """
-    Analyzes a 2D temperature array to find the hottest and coldest areas of pixels of size (size x size).
-    Returns the temperatures and their (X, Y) coordinates, but only if they exceed a certain threshold.
-    """
-    hot_data, cold_data = get_hot_cold_spots(temp_array, size)
-    
-    if hot_data[0] < high_threshold:
-        hot_data = (None, None, None)
-    
-    if cold_data[0] > low_threshold:
-        cold_data = (None, None, None)
-    
-    return hot_data, cold_data
-
 def subtract_background(current_frame, background_frame):
     """
     Subtracts a static thermal baseline (e.g., warm stepper motors) from the current frame.
@@ -184,3 +150,69 @@ def load_transform_matrix(filename="transform_matrix.json"):
     with open(filename, "r") as f:
         matrix = np.array(json.load(f), dtype=np.float32)
     return matrix
+
+def calibrate_with_checkerboard(image_array, board_dims=(7, 7), square_size_mm=30.0, filename="transform_matrix.json"):
+    """
+    Finds a thermal checkerboard in the image and computes a highly accurate homography matrix.
+    
+    Inputs:
+        image_array: The 2D temperature array (or radiometric counts) from the camera.
+        board_dims: The number of INTERIOR corners on the checkerboard (columns, rows).
+        square_size_mm: The physical size of one side of a printed square in millimeters.
+    """
+    # Calculate the 2nd and 98th percentiles to ignore extreme hot/cold noise spikes
+    vmin, vmax = np.percentile(image_array, (2, 98))
+    
+    # Clip the array to these limits
+    clipped_array = np.clip(image_array, a_min=vmin, a_max=vmax)
+    
+    # Normalize the clipped array to 8-bit (0-255)
+    img_norm = cv2.normalize(clipped_array, None, 0, 255, cv2.NORM_MINMAX)
+    gray_img = np.uint8(img_norm)
+    gray_img = cv2.bitwise_not(gray_img)
+    
+    # --- DEBUG VIEW ---
+    # This pops up a window showing exactly what OpenCV is trying to process.
+    # If this window looks like a solid gray blob, your thermal delta is still too low.
+    cv2.imshow("OpenCV Debug View", gray_img)
+    cv2.waitKey(500) # Pause for half a second to let the window render
+    # ------------------
+    
+    # Generate the ideal real-world coordinates for the checkerboard corners
+    # This creates a grid of points like (0,0,0), (30,0,0), (60,0,0)...
+    obj_points = np.zeros((board_dims[0] * board_dims[1], 3), np.float32)
+    obj_points[:, :2] = np.mgrid[0:board_dims[0], 0:board_dims[1]].T.reshape(-1, 2)
+    obj_points *= square_size_mm
+    
+    # Drop the Z-axis (since the gantry bed is flat) so it matches the 2D pixel coordinates
+    pts_mm = obj_points[:, :2] 
+
+    # Find the checkerboard corners in the thermal image
+    flags = cv2.CALIB_CB_ADAPTIVE_THRESH + cv2.CALIB_CB_NORMALIZE_IMAGE
+    found, corners = cv2.findChessboardCorners(gray_img, board_dims, flags)
+    
+    if found:
+        print("Checkerboard detected! Refining sub-pixel coordinates...")
+        
+        # Refine the corner detection to sub-pixel accuracy for maximum precision
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        corners_subpix = cv2.cornerSubPix(gray_img, corners, (11, 11), (-1, -1), criteria)
+        
+        # Reshape the corners array to match the (N, 2) shape of pts_mm
+        pts_pixel = corners_subpix.reshape(-1, 2)
+        
+        # Calculate the Homography matrix utilizing all points
+        # RANSAC ignores any falsely detected corner outliers
+        matrix, status = cv2.findHomography(pts_pixel, pts_mm, cv2.RANSAC, 5.0)
+        
+        # Save the matrix using your existing JSON logic
+        if os.path.exists(filename):
+            os.remove(filename)
+        with open(filename, "w") as f:
+            json.dump(matrix.tolist(), f)
+            
+        print("Checkerboard calibration complete. Matrix saved.")
+        return matrix
+    else:
+        print("Failed to detect checkerboard. Ensure the thermal contrast is high enough.")
+        return None

@@ -1,4 +1,3 @@
-import os
 import sys
 print(sys.executable)
 import PySpin
@@ -7,8 +6,10 @@ matplotlib.use('Qt5Agg')  # Add this line to force an interactive window
 import matplotlib.pyplot as plt
 import keyboard
 import numpy as np
+import time
 import thermal_analysis as ta
-
+from zaber_motion import Units
+from zaber_motion.ascii import Connection
 
 class IRFormatType:
     LINEAR_10MK = 1
@@ -18,7 +19,6 @@ class IRFormatType:
 
 CONTINUE_RECORDING = True
 CHOSEN_IR_TYPE = IRFormatType.RADIOMETRIC
-
 
 def handle_close(evt):
     """
@@ -31,7 +31,7 @@ def handle_close(evt):
     CONTINUE_RECORDING = False
 
 
-def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
+def acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y):
     """
     This function continuously acquires images from a device and display them in a GUI.
 
@@ -45,6 +45,8 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
     :rtype: bool
     """
     global CONTINUE_RECORDING
+    global physical_cords
+    global pixel_cords
 
     sNodemap = cam.GetTLStreamNodeMap()
 
@@ -221,14 +223,23 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
 
             K2 = r1 + r2 + r3
             print('K2 =', K2)
-        if os.path.exists("background.npy"):
-            background_Temp = ta.load_background(filename="background.npy")  # Load the background frame from a .npy file if it exists
-        else:
-            background_Temp = None
-        if os.path.exists("transform_matrix.json"):
-                                    transform_matrix = ta.load_transform_matrix("transform_matrix.json")
-        else:
-            transform_matrix = None
+        """if CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
+            print('\n--- BACKGROUND CALIBRATION ---')
+            input('Ensure the hot calibration target is NOT on the gantry bed. Press Enter to capture background...')
+            
+            # Grab a single frame for the baseline
+            bg_image_result = cam.GetNextImage()
+            bg_image_data = bg_image_result.GetNDArray()
+            
+            # Convert background frame to Temperature (Radiometric formula)
+            bg_Radiance = (bg_image_data - J0) / J1
+            background_Temp = (B / np.log(R / ((bg_Radiance / Emiss / Tau) - K2) + F)) - 273.15
+            ta.save_background(background_Temp, filename="background.npy")  # Save the background frame to a .npy file
+            bg_image_result.Release()
+            print('Background captured successfully.')
+            
+            input('Place the hot calibration target on the gantry head. Press Enter to begin tracking passes...')
+        """
         # Retrieve and display images
         print('Press Enter to stop streaming')
         while(CONTINUE_RECORDING):
@@ -244,96 +255,34 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
                 #  Once an image from the buffer is saved and/or no longer
                 #  needed, the image must be released in order to keep the
                 #  buffer from filling up.
+                for iteration in range(1, 5):  # Move to 4 different positions for calibration
 
-                image_result = cam.GetNextImage()
+                    image_result = cam.GetNextImage()
 
-                #  Ensure image completion
-                if image_result.IsIncomplete():
-                    print('Image incomplete with image status %d ...' % image_result.GetImageStatus())
+                    #  Ensure image completion
+                    if image_result.IsIncomplete():
+                        print('Image incomplete with image status %d ...' % image_result.GetImageStatus())
 
-                else:
+                    else:
 
-                    # Getting the image data as a np array
-                    image_data = image_result.GetNDArray()
+                        # Getting the image data as a np array
+                        image_data = image_result.GetNDArray()
 
-                    # Draws an image (data, TemperatureLinear10mK, TemperatureLinear100mK, TemperatureRadiometric on the current figure.
-                    # Select the desired output first
+                        if CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
+                            # Transforming the data array into a pseudo radiance array, if streaming mode is set to Radiometric.
+                            # and then calculating the temperature array (degrees Celsius) with the full thermography formula
+                            image_Radiance = (image_data - J0) / J1
+                            image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
 
-                    # Adapt the title to the correct streaming mode: TempLinear10mK, or TempLinear100mK or pseudo Radiance or Temperature Radiometric
-                    fig.suptitle('A700 Temperature Radiometric')
+                            ta.calibrate_with_checkerboard(image_Temp, board_dims=(10, 8), square_size_mm=30.0)
 
-                    if CHOSEN_IR_TYPE == IRFormatType.LINEAR_10MK:
-                        # Transforming the data array into a temperature array, if streaming mode is set to TemperatueLinear10mK
-                        image_Temp_Celsius_high = (image_data * 0.01) - 273.15
-                        # Displaying an image of temperature when streaming mode is set to TemperatureLinear10mK
-                        plt.imshow(image_Temp_Celsius_high, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-
-                    elif CHOSEN_IR_TYPE == IRFormatType.LINEAR_100MK:
-                        # Transforming the data array into a temperature array, if streaming mode is set to TemperatureLinear100mK
-                        image_Temp_Celsius_low = (image_data * 0.1) - 273.15
-                        # Displaying an image of temperature when streaming mode is set to TemperatureLinear100mK
-                        plt.imshow(image_Temp_Celsius_low, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-
-                    elif CHOSEN_IR_TYPE == IRFormatType.RADIOMETRIC:
-                        # Transforming the data array into a pseudo radiance array, if streaming mode is set to Radiometric.
-                        # and then calculating the temperature array (degrees Celsius) with the full thermography formula
-                        image_Radiance = (image_data - J0) / J1
-                        image_Temp = (B / np.log(R / ((image_Radiance / Emiss / Tau) - K2) + F)) - 273.15
-                        if background_Temp is not None:
-                            clean_temp_array = ta.subtract_background(image_Temp, background_Temp)
-                        else :
-                            clean_temp_array = image_Temp
-                        max_temp, c_x, c_y = ta.get_hot_spot_centroid(clean_temp_array, threshold=0.75)
-                        
-                        # Print the data to the console
-                        if max_temp is not None and c_x is not None and c_y is not None:
-                            print(f"Hottest: {max_temp:.2f}°C at (X:{c_x}, Y:{c_y})")
-                        else: 
-                            print("No hot spot found above the threshold.")
-                        if transform_matrix is not None:
-                            hot_real_world = ta.get_mm_from_pixels(c_x, c_y, transform_matrix)
-                        else:
-                            hot_real_world = (None, None)       
-                        print(f"Hottest real-world coordinates: {hot_real_world}")
-                        # Displaying an image of temperature (degrees Celsius) when streaming mode is set to Radiometric
-                        plt.imshow(image_Temp, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-                        
-                        # Plot a red crosshair on the hottest spot
-                        if c_x is not None and c_y is not None:
-                            plt.plot(c_x, c_y, marker='+', color='red', markersize=15, markeredgewidth=2)
-                        
-                        # Plot a blue crosshair on the coldest spot
-                        #plt.plot(cold_data[1], cold_data[2], marker='+', color='cyan', markersize=15, markeredgewidth=2)
-
-                        '''
-                        # Displaying an image of counts when streaming mode is set to Radiometric
-                        plt.imshow(image_data, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-                        '''
-                        '''
-                        # Displaying an image of pseudo radiance when streaming mode is set to Radiometric
-                        plt.imshow(image_Radiance, cmap='inferno', aspect='auto')
-                        plt.colorbar(format='%.2f')
-                        '''
-
-                    # Interval in plt.pause(interval) determines how fast the images are displayed in a GUI
-                    # Interval is in seconds.
-                    plt.pause(0.001)
-
-                    # Clear current reference of a figure. This will improve display speed significantly
-                    plt.clf()
-
-                    # If user presses enter, close the program
-                    if keyboard.is_pressed('ENTER'):
-                        print('Program is closing...')
-
-                        # Close figure
-                        plt.close('all')
-                        CONTINUE_RECORDING = False
-
+                            # If user presses enter, close the program
+                            if keyboard.is_pressed('ENTER'):
+                                print('Program is closing...')
+        
+                                # Close figure
+                                # plt.close('all')
+                                CONTINUE_RECORDING = False
                 #  Release image
                 #
                 #  *** NOTES ***
@@ -360,7 +309,7 @@ def acquire_and_display_images(cam, nodemap, nodemap_tldevice):
     return True
 
 
-def run_single_camera(cam):
+def run_single_camera(cam, x, y):
     """
     This function acts as the body of the example; please see NodeMapInfo example
     for more in-depth comments on setting up cameras.
@@ -382,7 +331,7 @@ def run_single_camera(cam):
         nodemap = cam.GetNodeMap()
 
         # Acquire images
-        result &= acquire_and_display_images(cam, nodemap, nodemap_tldevice)
+        result &= acquire_and_display_images(cam, nodemap, nodemap_tldevice, x, y)
 
         # Deinitialize camera
         cam.DeInit()
@@ -434,11 +383,35 @@ def main():
     # Run example on each camera
     for i, cam in enumerate(cam_list):
 
-        print('Running example for camera %d...' % i)
+        print('Running calibration for camera ...')
+        with Connection.open_serial_port("COM6") as connection:
+            connection.enable_alerts()
 
-        result &= run_single_camera(cam)
-        print('Camera %d example complete... \n' % i)
-
+            device_list = connection.detect_devices()
+            print("Found {} devices".format(len(device_list)))
+            device = device_list[0]
+            print("Device has {} axes".format(device.axis_count))
+            x = device.get_axis(1)
+            y = device.get_axis(2)
+            # Home the axis if it is not already homed (just means check if the axis is at its reference position)
+            if not x.is_homed():
+                print("Axis 1 is not homed. Homing now...")
+                x.home(wait_until_idle=False)
+            
+            if not y.is_homed():
+                print("Axis 2 is not homed. Homing now...")
+                y.home(wait_until_idle=False)
+            x.wait_until_idle()
+            y.wait_until_idle()
+            result &= run_single_camera(cam, x, y)
+            x.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+            y.move_absolute(0, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
+            x.wait_until_idle()
+            y.wait_until_idle()
+        print('Camera calibration complete... \n')
+        print(f'Pixel coordinates of hot spots: {pixel_cords}')
+        print(f'Physical coordinates of hot spots: {physical_cords}')
+        conversion_matrix = ta.calibrate_camera_perspective(pixel_cords, physical_cords)
     # Release reference to camera
     # NOTE: Unlike the C++ examples, we cannot rely on pointer objects being automatically
     # cleaned up when going out of scope.
